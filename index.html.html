@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROSEGUR - Gestión de Habitaciones y Personal</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS (Librería para leer archivos Excel) -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans text-slate-800 antialiased" x-data="campManager()" x-init="initApp()">
+
+    <!-- VISTA 1: MODO REGISTRO PÚBLICO -->
+    <template x-if="isPublicMode">
+        <div class="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
+            <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+                <div class="bg-blue-900 text-white p-6 text-center relative">
+                    <span class="text-xs font-bold tracking-widest text-amber-400 uppercase">PROSEGUR</span>
+                    <h1 class="text-xl font-bold mt-1">Formulario de Registro de Personal</h1>
+                    <p class="text-xs text-blue-200 mt-1">Ingrese sus datos para la asignación de habitación</p>
+                </div>
+
+                <form @submit.prevent="submitPublicForm()" class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nombre Completo *</label>
+                        <input type="text" x-model="publicForm.name" required placeholder="Ej: Juan Pérez" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">RUT *</label>
+                            <input type="text" x-model="publicForm.rut" required placeholder="12.345.678-K" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Turno *</label>
+                            <select x-model="publicForm.shift" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="7x7">7x7</option>
+                                <option value="14x14">14x14</option>
+                                <option value="4x3">4x3</option>
+                                <option value="5x2">5x2</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Servicio / Área</label>
+                            <input type="text" x-model="publicForm.service" placeholder="Ej: Minera Escondida" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Cargo</label>
+                            <input type="text" x-model="publicForm.role" placeholder="Ej: Guardia / Operador" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <hr class="border-slate-200 my-2">
+
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Campamento *</label>
+                        <select x-model="publicForm.campId" @change="publicForm.moduleId = ''; publicForm.roomId = ''" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">Seleccione Campamento</option>
+                            <template x-for="camp in camps" :key="camp.id">
+                                <option :value="camp.id" x-text="camp.name"></option>
+                            </template>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3" x-show="publicForm.campId">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Módulo *</label>
+                            <select x-model="publicForm.moduleId" @change="publicForm.roomId = ''" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">Seleccione Módulo</option>
+                                <template x-for="mod in getModulesForCamp(publicForm.campId)" :key="mod.id">
+                                    <option :value="mod.id" x-text="mod.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Habitación *</label>
+                            <select x-model="publicForm.roomId" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">Seleccione Habitación</option>
+                                <template x-for="room in getAvailableRooms(publicForm.moduleId)" :key="room.id">
+                                    <option :value="room.id" x-text="'Hab. ' + room.number + ' (Libres: ' + getFreeBeds(room) + ')'"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 mt-4">
+                        <span>Registrar Ingreso</span>
+                    </button>
+                </form>
+
+                <div x-show="formSubmitted" class="p-4 bg-emerald-50 border-t border-emerald-200 text-center">
+                    <p class="text-xs font-bold text-emerald-800">¡Registro guardado correctamente!</p>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- VISTA 2: PANEL DE ADMINISTRACIÓN CON MENÚ LATERAL -->
+    <template x-if="!isPublicMode">
+        <div class="flex min-h-screen">
+
+            <!-- SIDEBAR IZQUIERDO -->
+            <aside class="w-64 bg-blue-950 text-white flex flex-col justify-between shrink-0 shadow-xl border-r border-blue-900 sticky top-0 h-screen">
+                <div>
+                    <div class="p-5 border-b border-blue-900 bg-blue-900/50">
+                        <span class="text-[10px] font-extrabold tracking-widest text-amber-400 uppercase block">Prosegur Regiones</span>
+                        <h1 class="text-lg font-bold text-white leading-tight mt-0.5">Gestión Campamentos</h1>
+                        <p class="text-[11px] text-blue-300 mt-1 flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                            <span>PROSEGUR</span>
+                        </p>
+                    </div>
+
+                    <nav class="p-3 space-y-1.5">
+                        <button @click="currentTab = 'map'" 
+                                :class="currentTab === 'map' ? 'bg-blue-800 text-white font-bold shadow-md border-l-4 border-amber-400' : 'text-blue-200 hover:bg-blue-900/70 hover:text-white'"
+                                class="w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs transition-all text-left">
+                            <i data-lucide="layout-grid" class="w-4 h-4 text-amber-400"></i>
+                            <span>Mapa de Módulos</span>
+                        </button>
+
+                        <button @click="currentTab = 'workers'" 
+                                :class="currentTab === 'workers' ? 'bg-blue-800 text-white font-bold shadow-md border-l-4 border-amber-400' : 'text-blue-200 hover:bg-blue-900/70 hover:text-white'"
+                                class="w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs transition-all text-left">
+                            <i data-lucide="users" class="w-4 h-4 text-amber-400"></i>
+                            <span>Personal y Turnos</span>
+                        </button>
+
+                        <button @click="currentTab = 'excel'" 
+                                :class="currentTab === 'excel' ? 'bg-blue-800 text-white font-bold shadow-md border-l-4 border-amber-400' : 'text-blue-200 hover:bg-blue-900/70 hover:text-white'"
+                                class="w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs transition-all text-left">
+                            <i data-lucide="file-spreadsheet" class="w-4 h-4 text-amber-400"></i>
+                            <span>Cargar Excel</span>
+                        </button>
+
+                        <button @click="currentTab = 'reports'" 
+                                :class="currentTab === 'reports' ? 'bg-blue-800 text-white font-bold shadow-md border-l-4 border-amber-400' : 'text-blue-200 hover:bg-blue-900/70 hover:text-white'"
+                                class="w-full flex items-center gap-3 px-3.5 py-3 rounded-lg text-xs transition-all text-left">
+                            <i data-lucide="bar-chart-3" class="w-4 h-4 text-amber-400"></i>
+                            <span>Reportes</span>
+                        </button>
+                    </nav>
+                </div>
+
+                <div class="p-3 border-t border-blue-900 bg-blue-900/30">
+                    <button @click="openModal('shareModal')" class="w-full py-2.5 px-3 bg-amber-400 hover:bg-amber-300 text-blue-950 font-bold text-xs rounded-lg shadow transition flex items-center justify-center gap-2">
+                        <i data-lucide="qr-code" class="w-4 h-4"></i>
+                        <span>Enlace Formulario Público</span>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- ÁREA PRINCIPAL -->
+            <div class="flex-1 flex flex-col min-w-0">
+                <header class="bg-white border-b border-slate-200 px-6 py-3.5 flex justify-between items-center sticky top-0 z-30 shadow-sm">
+                    <h2 class="text-sm font-bold text-slate-800 uppercase tracking-wider" x-text="getTabTitle()"></h2>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Sincronizado en Vivo
+                    </span>
+                </header>
+
+                <main class="p-6 space-y-6 flex-1 overflow-y-auto">
+                    
+                    <!-- PESTAÑA: MAPA DE MÓDULOS -->
+                    <div x-show="currentTab === 'map'" class="space-y-6">
+                        <h3 class="text-lg font-bold text-slate-900">Mapa de Habitaciones y Ocupación</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <template x-for="camp in camps" :key="camp.id">
+                                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                                    <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                                        <h4 class="font-bold text-blue-900" x-text="camp.name"></h4>
+                                        <span class="text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">Activo</span>
+                                    </div>
+                                    <p class="text-xs text-slate-600">Camas Libres: <span class="font-bold text-emerald-600" x-text="getFreeBedsCount(camp)"></span></p>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- PESTAÑA: PERSONAL Y TURNOS -->
+                    <div x-show="currentTab === 'workers'" class="space-y-6">
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                            <h3 class="text-lg font-bold text-slate-900">Nómina General de Personal</h3>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs text-slate-600">
+                                    <thead class="bg-slate-50 text-slate-700 uppercase font-bold border-b border-slate-200">
+                                        <tr>
+                                            <th class="p-3">Nombre</th>
+                                            <th class="p-3">RUT</th>
+                                            <th class="p-3">Turno</th>
+                                            <th class="p-3">Cargo</th>
+                                            <th class="p-3">Servicio</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template x-for="worker in workers" :key="worker.rut">
+                                            <tr class="border-b border-slate-100 hover:bg-slate-50">
+                                                <td class="p-3 font-bold text-slate-800" x-text="worker.name"></td>
+                                                <td class="p-3" x-text="worker.rut"></td>
+                                                <td class="p-3" x-text="worker.shift"></td>
+                                                <td class="p-3" x-text="worker.role"></td>
+                                                <td class="p-3" x-text="worker.service"></td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PESTAÑA: CARGAR EXCEL -->
+                    <div x-show="currentTab === 'excel'" class="space-y-6">
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-lg font-bold text-slate-900">Importación Masiva desde Excel</h3>
+                                    <p class="text-xs text-slate-500">Cargue una planilla con columnas: <strong>Nombre, RUT, Turno, Cargo, Servicio</strong></p>
+                                </div>
+                                <button @click="downloadExcelTemplate()" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-lg border border-slate-300 flex items-center gap-2">
+                                    <i data-lucide="download" class="w-4 h-4"></i>
+                                    <span>Descargar Plantilla Ejemplo</span>
+                                </button>
+                            </div>
+
+                            <!-- Zona de Carga de Archivo -->
+                            <div class="border-2 border-dashed border-blue-200 bg-blue-50/50 hover:bg-blue-50 rounded-xl p-8 text-center transition cursor-pointer" @click="$refs.fileInput.click()">
+                                <input type="file" x-ref="fileInput" @change="handleFileUpload($event)" accept=".xlsx, .xls" class="hidden">
+                                <i data-lucide="file-up" class="w-10 h-10 text-blue-900 mx-auto mb-2"></i>
+                                <p class="text-sm font-bold text-slate-700">Haga clic aquí o arrastre su archivo Excel</p>
+                                <p class="text-xs text-slate-500 mt-1">Soporta formatos .XLSX y .XLS</p>
+                            </div>
+
+                            <!-- Resumen de Importación -->
+                            <div x-show="importedData.length > 0" class="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2">
+                                <p class="text-xs font-bold text-emerald-800" x-text="'Se leyeron ' + importedData.length + ' registros correctamente.'"></p>
+                                <button @click="confirmImport()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow">
+                                    Confirmar y Guardar en la Nómina
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PESTAÑA: REPORTES -->
+                    <div x-show="currentTab === 'reports'" class="space-y-6">
+                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                            <h3 class="text-lg font-bold text-slate-900">Disponibilidad por Campamento</h3>
+                            <template x-for="camp in camps" :key="camp.id">
+                                <div class="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                                    <div class="flex justify-between items-center text-sm">
+                                        <span class="font-bold text-slate-800" x-text="camp.name"></span>
+                                        <span class="text-xs font-bold text-blue-900" x-text="getAvailabilityPercentage(camp) + '% Disponible'"></span>
+                                    </div>
+                                    <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                                        <div class="bg-emerald-500 h-3 rounded-full" :style="'width: ' + getAvailabilityPercentage(camp) + '%'"></div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                </main>
+            </div>
+
+            <!-- MODAL: ENLACE PÚBLICO -->
+            <div x-show="activeModal === 'shareModal'" x-cloak class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+                    <h3 class="text-lg font-bold text-slate-900">Enlace Público para Trabajadores</h3>
+                    <input type="text" readonly :value="getPublicUrl()" class="w-full bg-slate-50 p-2 border border-slate-300 rounded text-xs font-mono">
+                    <div class="flex justify-end gap-2">
+                        <button @click="copyPublicUrl()" class="px-4 py-2 bg-blue-900 text-white font-bold text-xs rounded-lg">Copiar Enlace</button>
+                        <button @click="closeModal()" class="px-4 py-2 bg-slate-200 text-slate-700 font-bold text-xs rounded-lg">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </template>
+
+    <script>
+        function campManager() {
+            return {
+                currentTab: 'map',
+                isPublicMode: false,
+                activeModal: null,
+                copied: false,
+                formSubmitted: false,
+                importedData: [],
+
+                camps: [{ id: 'c1', name: 'Campamento Principal' }],
+                modules: [{ id: 'm1', campId: 'c1', name: 'Módulo A' }],
+                rooms: [{ id: 'r1', moduleId: 'm1', number: '101', capacity: 2, occupants: [] }],
+
+                workers: [
+                    { name: 'Juan Pérez', rut: '12.345.678-K', shift: '7x7', role: 'Guardia', service: 'Escondida' }
+                ],
+
+                publicForm: { name: '', rut: '', shift: '7x7', service: '', role: '', campId: '', moduleId: '', roomId: '' },
+
+                initApp() {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    if (urlParams.get('modo') === 'registro') this.isPublicMode = true;
+                    this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+                },
+
+                getTabTitle() {
+                    switch(this.currentTab) {
+                        case 'map': return 'Mapa de Módulos';
+                        case 'workers': return 'Personal y Turnos';
+                        case 'excel': return 'Cargar Excel Masivo';
+                        case 'reports': return 'Disponibilidad por Campamento';
+                        default: return 'Gestión de Habitaciones';
+                    }
+                },
+
+                handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        
+                        // Convertir Excel a JSON
+                        const json = XLSX.utils.sheet_to_json(worksheet);
+                        this.importedData = json.map(row => ({
+                            name: row['Nombre'] || row['NOMBRE'] || '',
+                            rut: row['RUT'] || row['Rut'] || '',
+                            shift: row['Turno'] || row['TURNO'] || '7x7',
+                            role: row['Cargo'] || row['CARGO'] || '',
+                            service: row['Servicio'] || row['SERVICIO'] || ''
+                        }));
+                    };
+                    reader.readAsArrayBuffer(file);
+                },
+
+                confirmImport() {
+                    this.workers.push(...this.importedData);
+                    alert('¡' + this.importedData.length + ' trabajadores importados con éxito!');
+                    this.importedData = [];
+                    this.currentTab = 'workers';
+                },
+
+                downloadExcelTemplate() {
+                    const templateData = [
+                        { Nombre: 'Carlos Gómez', RUT: '15.678.901-2', Turno: '7x7', Cargo: 'Operador CCTV', Servicio: 'Escondida' },
+                        { Nombre: 'María Torres', RUT: '18.234.567-8', Turno: '14x14', Cargo: 'Guardia', Servicio: 'Escondida' }
+                    ];
+                    const worksheet = XLSX.utils.json_to_sheet(templateData);
+                    const workbook = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(workbook, worksheet, 'Plantilla');
+                    XLSX.writeFile(workbook, 'Plantilla_Carga_Personal.xlsx');
+                },
+
+                getPublicUrl() { return window.location.origin + window.location.pathname + '?modo=registro'; },
+                copyPublicUrl() { navigator.clipboard.writeText(this.getPublicUrl()); },
+                getModulesForCamp(campId) { return this.modules.filter(m => m.campId === campId); },
+                getAvailableRooms(moduleId) { return this.rooms.filter(r => r.moduleId === moduleId); },
+                getFreeBeds(room) { return room.capacity - room.occupants.length; },
+                getFreeBedsCount(camp) { return 10; },
+                getAvailabilityPercentage(camp) { return 75; },
+                submitPublicForm() { this.formSubmitted = true; },
+                openModal(name) { this.activeModal = name; },
+                closeModal() { this.activeModal = null; }
+            };
+        }
+    </script>
+</body>
+</html>
